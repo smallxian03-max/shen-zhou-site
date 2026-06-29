@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { AppData, CurrentUser } from "./types";
 import { loadAppData } from "./utils/storage";
 import { syncLoad, syncSave, subscribeToChanges, unsubscribeFromChanges, isSupabaseConfigured } from "./utils/supabase";

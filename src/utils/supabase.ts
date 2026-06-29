@@ -1,4 +1,4 @@
-﻿import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { AppData } from "../types";
 import { loadAppData, saveAppData } from "./storage";
 

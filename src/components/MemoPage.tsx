@@ -1,4 +1,4 @@
-﻿import { useState, useRef } from "react";
+import { useState, useRef } from "react";
 import { AppData, MemoItem, MemoComment, MemoCategory } from "../types";
 import { generateId } from "../utils/time";
 import { fileToBase64 } from "../utils/image";

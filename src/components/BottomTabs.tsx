@@ -1,4 +1,4 @@
-﻿import { TabType } from "../App";
+import { TabType } from "../App";
 import { CurrentUser } from "../types";
 import { Heart, Calendar, FileText, MessageSquare, Dumbbell, Repeat } from "lucide-react";
 
