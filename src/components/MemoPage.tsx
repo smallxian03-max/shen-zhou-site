@@ -1,7 +1,8 @@
 import { useState, useRef } from "react";
 import { AppData, MemoItem, MemoComment, MemoCategory } from "../types";
 import { generateId } from "../utils/time";
-import { fileToBase64 } from "../utils/image";
+import { fileToBase64, compressImage } from "../utils/image";
+import { uploadImage, isSupabaseConfigured } from "../utils/supabase";
 import { Plus, Trash2, Image as ImageIcon, X, Send } from "lucide-react";
 import ConfirmDialog from "./ConfirmDialog";
 
@@ -60,12 +61,32 @@ export default function MemoPage({ appData, updateData }: Props) {
     setShowEditor(false);
   };
 
+  const [uploading, setUploading] = useState(false);
+
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
+    if (!file) return;
+    setUploading(true);
+    try {
+      // Try Supabase Storage first
+      if (isSupabaseConfigured()) {
+        const url = await uploadImage(file);
+        if (url) {
+          setImageUrl(url);
+          setUploading(false);
+          e.target.value = "";
+          return;
+        }
+      }
+      // Fallback to base64
+      const base64 = await fileToBase64(file);
+      setImageUrl(base64);
+    } catch (e) {
       const base64 = await fileToBase64(file);
       setImageUrl(base64);
     }
+    setUploading(false);
+    e.target.value = "";
   };
 
   const toggleSelect = (id: string) => {
@@ -316,7 +337,7 @@ export default function MemoPage({ appData, updateData }: Props) {
                 className="flex items-center gap-2 text-sm text-amber-500 hover:text-amber-600 bg-amber-50 px-4 py-2.5 rounded-xl w-full active:scale-[0.98] transition-all"
               >
                 <ImageIcon size={18} />
-                添加图片
+                {uploading ? "上传中..." : "添加图片"}
               </button>
               <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
               {imageUrl && (

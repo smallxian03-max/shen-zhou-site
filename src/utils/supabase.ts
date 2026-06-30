@@ -1,6 +1,7 @@
-import { createClient, SupabaseClient } from "@supabase/supabase-js";
+﻿import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { AppData } from "../types";
 import { loadAppData, saveAppData } from "./storage";
+import { compressImage } from "./image";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "";
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
@@ -23,11 +24,34 @@ export function getSupabase(): SupabaseClient {
   return supabase;
 }
 
-export async function syncLoad(): Promise<AppData> {
-  if (!isSupabaseConfigured()) {
-    return loadAppData();
+/** Upload image to Supabase Storage and return public URL */
+export async function uploadImage(file: File): Promise<string | null> {
+  if (!isSupabaseConfigured()) return null;
+  try {
+    const compressed = await compressImage(file, 800);
+    const ext = compressed.name.split(".").pop() || "jpg";
+    const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const client = getSupabase();
+    const { data, error } = await client.storage
+      .from("images")
+      .upload(fileName, compressed, {
+        contentType: "image/jpeg",
+        upsert: false,
+      });
+    if (error) {
+      console.warn("Image upload failed:", error.message);
+      return null;
+    }
+    const { data: urlData } = client.storage.from("images").getPublicUrl(fileName);
+    return urlData.publicUrl;
+  } catch (e) {
+    console.warn("Image upload error:", e);
+    return null;
   }
+}
 
+export async function syncLoad(): Promise<AppData> {
+  if (!isSupabaseConfigured()) return loadAppData();
   try {
     const client = getSupabase();
     const { data, error } = await client
@@ -35,31 +59,22 @@ export async function syncLoad(): Promise<AppData> {
       .select("data, updated_at")
       .eq("id", APP_ID)
       .single();
-
     if (error && error.code !== "PGRST116") {
       console.warn("Supabase load error:", error);
       return loadAppData();
     }
-
     if (data?.data) {
       const remoteData = data.data as AppData;
-      // Merge with localStorage data (local takes precedence for fields not in remote)
       const local = loadAppData();
-      // Use the more recent version — compare updated_at
       const remoteTime = new Date(data.updated_at || 0).getTime();
-      
-      // Try to get local save time
       const localTimeRaw = localStorage.getItem("shen-zhou-app-saved-at");
       const localTime = localTimeRaw ? new Date(localTimeRaw).getTime() : 0;
-
       if (remoteTime >= localTime) {
-        // Use remote data, but keep local identity
         saveAppData({ ...remoteData, currentUser: local.currentUser, hasSelectedIdentity: local.hasSelectedIdentity });
         return { ...remoteData, currentUser: local.currentUser, hasSelectedIdentity: local.hasSelectedIdentity };
       }
       return local;
     }
-
     return loadAppData();
   } catch (e) {
     console.warn("Supabase syncLoad failed, using local:", e);
@@ -68,22 +83,14 @@ export async function syncLoad(): Promise<AppData> {
 }
 
 export async function syncSave(data: AppData): Promise<void> {
-  // Always save locally first
   saveAppData(data);
-
   if (!isSupabaseConfigured()) return;
-
   try {
     const client = getSupabase();
     const now = new Date().toISOString();
     localStorage.setItem("shen-zhou-app-saved-at", now);
-
     await client.from("app_state").upsert(
-      {
-        id: APP_ID,
-        data: sanitizeData(data),
-        updated_at: now,
-      },
+      { id: APP_ID, data, updated_at: now },
       { onConflict: "id" }
     );
   } catch (e) {
@@ -91,33 +98,19 @@ export async function syncSave(data: AppData): Promise<void> {
   }
 }
 
-/** Remove base64 images from workout records to save space, keep a reference */
-function sanitizeData(data: AppData): AppData {
-  return data;
-}
-
 export function subscribeToChanges(callback: (data: AppData) => void): void {
   syncCallback = callback;
-
   if (!isSupabaseConfigured()) return;
-
   const client = getSupabase();
   channel = client.channel("app-sync");
-
   channel
     .on(
       "postgres_changes",
-      {
-        event: "UPDATE",
-        schema: "public",
-        table: "app_state",
-        filter: `id=eq.${APP_ID}`,
-      },
+      { event: "UPDATE", schema: "public", table: "app_state", filter: `id=eq.${APP_ID}` },
       (payload: { new: { data: AppData } }) => {
         if (payload.new?.data && syncCallback) {
           const local = loadAppData();
           const newData = payload.new.data as AppData;
-          // Keep local identity
           syncCallback({
             ...newData,
             currentUser: local.currentUser,
@@ -130,9 +123,6 @@ export function subscribeToChanges(callback: (data: AppData) => void): void {
 }
 
 export function unsubscribeFromChanges(): void {
-  if (channel) {
-    channel.unsubscribe();
-    channel = null;
-  }
+  if (channel) { channel.unsubscribe(); channel = null; }
   syncCallback = null;
 }

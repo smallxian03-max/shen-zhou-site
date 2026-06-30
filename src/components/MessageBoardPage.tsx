@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { AppData, Message, CurrentUser } from "../types";
 import { generateId } from "../utils/time";
 import { fileToBase64, downloadImage } from "../utils/image";
+import { uploadImage, isSupabaseConfigured } from "../utils/supabase";
 import { QUICK_PHRASES } from "../data/quickPhrases";
 import { Send, Image, Download, Camera } from "lucide-react";
 
@@ -49,14 +50,38 @@ export default function MessageBoardPage({ appData, updateData, currentUser }: P
     updateData({ ...appData, messages: [...messages, msg] });
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) handleSendImage(file);
+    if (!file) return;
+    if (isSupabaseConfigured()) {
+      const url = await uploadImage(file);
+      if (url) {
+        const msgItem: Message = { id: generateId(), type: "image" as const, imageUrl: url, createdBy: currentUser, createdAt: new Date().toISOString() };
+        updateData({ ...appData, messages: [...messages, msgItem] });
+      }
+    } else {
+      const base64 = await fileToBase64(file);
+      const m = { id: generateId(), type: "image" as const, imageUrl: base64, createdBy: currentUser, createdAt: new Date().toISOString() };
+      updateData({ ...appData, messages: [...messages, m] });
+    }
+    e.target.value = "";
   };
 
-  const handleCameraCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCameraCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) handleSendImage(file);
+    if (!file) return;
+    if (isSupabaseConfigured()) {
+      const url = await uploadImage(file);
+      if (url) {
+        const msgItem: Message = { id: generateId(), type: "image" as const, imageUrl: url, createdBy: currentUser, createdAt: new Date().toISOString() };
+        updateData({ ...appData, messages: [...messages, msgItem] });
+      }
+    } else {
+      const base64 = await fileToBase64(file);
+      const m = { id: generateId(), type: "image" as const, imageUrl: base64, createdBy: currentUser, createdAt: new Date().toISOString() };
+      updateData({ ...appData, messages: [...messages, m] });
+    }
+    e.target.value = "";
   };
 
   const handleQuickPhrase = (phrase: string) => {
