@@ -25,31 +25,30 @@ function App() {
   const [animating, setAnimating] = useState(false);
   const [nextTab, setNextTab] = useState<TabType | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const supabaseReady = isSupabaseConfigured();
-  const isRemoteUpdate = useRef(false);
+  
 
   const togetherDays = getDaysBetween(appData.anniversary.togetherStartDate, getTodayString());
 
-  // On mount: load from Supabase if configured, then subscribe for real-time
-  useEffect(() => {
-    if (supabaseReady) {
-      setSyncing(true);
-      syncLoad().then((remoteData) => {
-        setAppData(remoteData);
+    useEffect(() => {
+    async function initApp() {
+      if (supabaseReady) {
+        setSyncing(true);
+        try {
+          const remoteData = await syncLoad();
+          setAppData(remoteData);
+        } catch (e) {}
         setSyncing(false);
-      });
-
-      subscribeToChanges((newData: AppData) => {
-        isRemoteUpdate.current = true;
-        setAppData(newData);
-      });
+        subscribeToChanges((newData) => {
+          setAppData(newData);
+        });
+      }
+      setInitialLoading(false);
     }
-
-    return () => {
-      unsubscribeFromChanges();
-    };
+    initApp();
+    return () => { unsubscribeFromChanges(); };
   }, []);
-
   const persistData = useCallback((newData: AppData) => {
     syncSave(newData);
     const now = new Date().toISOString();
@@ -74,18 +73,10 @@ function App() {
     setShowConfirm(false);
   }, [appData, persistData]);
 
-  const updateData = useCallback(
-    (newData: AppData) => {
-      if (isRemoteUpdate.current) {
-        isRemoteUpdate.current = false;
-        setAppData(newData);
-      } else {
-        setAppData(newData);
-        persistData(newData);
-      }
-    },
-    [persistData]
-  );
+  const updateData = (newData: AppData) => {
+    setAppData(newData);
+    persistData(newData);
+  };
 
   const handleTabChange = useCallback((tab: TabType) => {
     if (tab === activeTab) return;
@@ -100,7 +91,17 @@ function App() {
     }, 200);
   }, [activeTab]);
 
-  if (!appData.hasSelectedIdentity || !appData.currentUser) {
+    if (initialLoading && supabaseReady) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-amber-50">
+        <div className="text-center">
+          <p className="text-5xl mb-4 animate-bounce">🐶</p>
+          <p className="text-sm text-amber-500">正在加载快乐星球...</p>
+        </div>
+      </div>
+    );
+  }
+if (!appData.hasSelectedIdentity || !appData.currentUser) {
     return (
       <>
         {supabaseReady && (
